@@ -1,0 +1,342 @@
+// testTextbuffer.c
+// A stub file for you to test your textbuffer implementation.
+// Note that you will NOT be submitting this - this is simply for you to
+// test  your  functions as you go. We will have our own testTexbuffer.c
+// for testing your submission.
+
+#include <assert.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "textbuffer.h"
+
+static void testNewTB(void);
+static void testAddPrefixTB(void);
+static void testMergeTB(void);
+static void testPasteTB(void);
+static void testPasteTB_2(void);
+static void testCutTB(void);
+static void testDeleteTB(void);
+static void testSearchTB(void);
+static void testFormRichText(void);
+static void freeMatches(Match match);
+
+int main(void) {
+
+	testNewTB();
+	testAddPrefixTB();
+	testMergeTB();
+	testPasteTB();
+	testPasteTB_2();
+	testCutTB();
+	testDeleteTB();
+	testSearchTB();
+	testFormRichText();
+	
+	printf("Yeah it works\n");
+}
+
+static void testFormRichText(void) {
+	TB tb1 = newTB("Simple *sub* please\nAno_ther pl_ease\n#Here we go\n*Dif*ficult _x2_\n");
+	formRichText(tb1);
+	char *tbDump1 = dumpTB(tb1, false);
+	assert(strcmp("Simple <b>sub</b> please\nAno<i>ther pl</i>ease\n<h1>Here we go</h1>\n<b>Dif</b>ficult <i>x2</i>\n", tbDump1) == 0);
+
+	TB tb2 = newTB("**Error1\n*Err_or_2\nN_est*ed* _\n*Err*or*3\n#*Err*or*3#\n###\n**\nHello ** world\n#\n");
+	formRichText(tb2);
+	char *tbDump2 = dumpTB(tb2, false);
+	assert(strcmp("**Error1\n*Err<i>or</i>2\nN<i>est*ed* </i>\n<b>Err</b>or*3\n<h1>*Err*or*3#</h1>\n<h1>##</h1>\n**\nHello ** world\n<h1></h1>\n", tbDump2) == 0);
+
+	TB tb3 = newTB("*asdf**asdf*\n");
+	formRichText(tb3);
+	char *tbDump3 = dumpTB(tb3, false);
+	assert(strcmp("<b>asdf</b><b>asdf</b>", tbDump3));
+
+
+	releaseTB(tb1);
+	releaseTB(tb2);
+	releaseTB(tb3);
+	free(tbDump1);
+	free(tbDump2);
+	free(tbDump3);
+}
+
+static void testSearchTB(void) {
+	TB tb = newTB("Match\nNo\nThere is Match\nNot here\nIn the Match middle\nCase-sensitive match\n Matc\n");
+	Match matches = searchTB(tb, "Match");
+	printf("// Inspect these:\n");
+	printf("Yours: ");
+	Match curr = matches;
+	while (curr != NULL) {
+		printf("(%d, %d) --> ", curr->lineNumber, curr->columnNumber);
+		curr = curr->next;
+	}
+	printf("X\n");
+	printf("Right: (1, 1) --> (3, 10) --> (5, 8) --> X\n");
+
+	TB tb2 = newTB("Easy\nas\na\nb\nc\n");
+	Match matches2 = searchTB(tb, "");
+	assert(matches2 == NULL);
+
+
+	Match matches3 = searchTB(tb, "z");
+	assert(matches3 == NULL);
+	
+	freeMatches(matches);
+	releaseTB(tb);
+	releaseTB(tb2);
+
+	TB tb3 = newTB("pompom is the\nmatch, pompom\nit is. Don't\nhit pompompom twice\nor else mop on your pom\npompompompom double match\npompom && pompom\n");
+	Match matches4 = searchTB(tb3, "pompom");
+	printf("// Inspect these:\n");
+	printf("Yours: ");
+	curr = matches4;
+	while (curr != NULL) {
+		printf("(%d, %d) --> ", curr->lineNumber, curr->columnNumber);
+		curr = curr->next;
+	}
+	printf("X\n");
+	printf("Right: (1, 1) --> (2, 8) --> (4, 5) --> (6, 1) --> (6, 7) --> (7, 1) --> (7, 11) --> X\n");
+
+	releaseTB(tb3);
+	freeMatches(matches4);
+}
+
+static void freeMatches(Match match) {
+	if (match == NULL) return;
+	freeMatches(match->next);
+	free(match);
+}
+
+static void testDeleteTB(void) {
+
+	TB tb = newTB("My fav story: \nFor sale:\nBaby shoes.\nNever worn\n- Hemingway\n");
+
+	deleteTB(tb, 1, 2);
+
+	char *original = dumpTB(tb, false);
+	assert(strcmp("Baby shoes.\nNever worn\n- Hemingway\n", original) == 0);
+
+	deleteTB(tb, 2, 3);
+	char *noCredit = dumpTB(tb, false);
+	assert(strcmp("Baby shoes.\n", noCredit) == 0);
+
+	releaseTB(tb);
+	free(noCredit);
+	free(original);
+
+	TB tb2 = newTB("It was\nthe best\nof times,\nit was\nthe worst\nof times.\n");
+	deleteTB(tb2, 2, 4);
+	char *noMiddle = dumpTB(tb2, false);
+	assert(strcmp("It was\nthe worst\nof times.\n", noMiddle) == 0);
+
+	deleteTB(tb2, 1, 3);
+	char *nothing = dumpTB(tb2, false);
+	assert(strcmp("", nothing) == 0);
+
+	free(nothing);
+	free(noMiddle);
+	releaseTB(tb2);
+
+	// Deleting nothing & everything
+}
+
+static void testCutTB(void) {
+
+	TB tb = newTB("My fav story: \nFor sale:\nBaby shoes.\nNever worn\n- Hemingway\n");
+	TB cutStart = cutTB(tb, 1, 2);
+	char *cutStartText = dumpTB(cutStart, false);
+	assert(strcmp("My fav story: \nFor sale:\n", cutStartText) == 0);
+
+	TB noCredit = cutTB(tb, 2, 3);
+	char *noCreditText = dumpTB(noCredit, false);
+	assert(strcmp("Never worn\n- Hemingway\n", noCreditText) == 0);
+
+	char *cutText = dumpTB(tb, false);
+	assert(strcmp("Baby shoes.\n", cutText) == 0);
+
+	releaseTB(tb);
+	free(cutText);
+	releaseTB(cutStart);
+	free(cutStartText);
+	releaseTB(noCredit);
+	free(noCreditText);
+
+	TB tb2 = newTB("It was\nthe best\nof times,\nit was\nthe worst\nof times.\n");
+	TB cutTB2 = cutTB(tb2, 2, 4);
+	char *cutMiddleText = dumpTB(cutTB2, false);
+	char *original = dumpTB(tb2, false);
+	assert(strcmp("the best\nof times,\nit was\n", cutMiddleText) == 0);
+	assert(strcmp("It was\nthe worst\nof times.\n", original) == 0);
+
+	free(original);
+	free(cutMiddleText);
+	releaseTB(tb2);
+	releaseTB(cutTB2);
+}
+
+static void testPasteTB(void) {
+	// Pasting in middle
+	TB tb = newTB("To\nbe\n");
+	TB toInsert = newTB("be\nor\nnot\nto\n");
+	pasteTB(tb, 2, toInsert);
+	char *textTB = dumpTB(tb, false);
+	char *copy = dumpTB(toInsert, false);
+
+	assert(strcmp(textTB, "To\nbe\nor\nnot\nto\nbe\n") == 0);
+	assert(strcmp(copy, "be\nor\nnot\nto\n") == 0);
+
+	// Replacing first
+	TB another = newTB("Shakespeare\nonce wrote: \n");
+	pasteTB(tb, 1, another);
+	char *textTB2 = dumpTB(tb, false);
+	char *copy2 = dumpTB(another, false);
+	
+	assert(strcmp(textTB2, "Shakespeare\nonce wrote: \nTo\nbe\nor\nnot\nto\nbe\n") == 0);
+	assert(strcmp(copy2, "Shakespeare\nonce wrote: \n") == 0);
+
+	free(copy);
+	free(copy2);
+	free(textTB);
+	free(textTB2);
+	releaseTB(tb);
+
+	// toInsert and another should still be usable:
+	mergeTB(toInsert, 1, another);
+	char *textCopy = dumpTB(toInsert, true);
+	assert(strcmp("1. Shakespeare\n2. once wrote: \n3. be\n4. or\n5. not\n6. to\n", textCopy) == 0);
+
+	free(textCopy);
+	releaseTB(toInsert);
+}
+
+static void testPasteTB_2(void) {
+
+	// Adding an empty list to the end?
+	TB tb1 = newTB("Flying\numbrellas\ncan\nkill\n");
+	TB empty = newTB("");
+	pasteTB(tb1, 5, empty);
+	char *result1 = dumpTB(tb1, false);
+	assert(strcmp(result1, "Flying\numbrellas\ncan\nkill\n") == 0);
+
+	releaseTB(tb1);
+	releaseTB(empty);
+	free(result1);
+
+	// Inserting into self
+	TB tb2 = newTB("a\nb\n");
+	pasteTB(tb2, 2, tb2);
+	char *result2 = dumpTB(tb2, true);
+	assert(strcmp("1. a\n2. a\n3. b\n4. b\n", result2) == 0);
+
+	releaseTB(tb2);
+
+	free(result2);
+
+}
+
+
+static void testMergeTB(void) {
+
+	// Inserting in middle
+	TB tb = newTB("To\nbe\n");
+	TB toInsert = newTB("be\nor\nnot\nto\n");
+	mergeTB(tb, 2, toInsert);
+	char *textTB = dumpTB(tb, false);
+	assert(strcmp(textTB, "To\nbe\nor\nnot\nto\nbe\n") == 0);
+
+	// Replacing first
+	TB tb2 = newTB("Shakespeare\nonce wrote: \n");
+	mergeTB(tb, 1, tb2);
+	char *textTB2 = dumpTB(tb, false);
+
+	assert(strcmp(textTB2, "Shakespeare\nonce wrote: \nTo\nbe\nor\nnot\nto\nbe\n") == 0);
+
+	free(textTB);
+	free(textTB2);
+	releaseTB(tb);
+
+	TB tb3 = newTB("Append\nsth\n");
+	TB toAppend = newTB("to\nthe\nend\n");
+
+	// Should do nothing
+	mergeTB(tb3, 1, tb3);
+	char *doNothing = dumpTB(tb3, false);
+	assert(strcmp("Append\nsth\n", doNothing) == 0);
+
+	mergeTB(tb3, 3, toAppend);
+	char *tb3Text = dumpTB(tb3, false);
+	assert(strcmp("Append\nsth\nto\nthe\nend\n", tb3Text) == 0);
+
+	releaseTB(tb3);
+	free(tb3Text);
+	free(doNothing);
+
+	TB tb4 = newTB("");
+
+	TB tb5 = newTB("");
+
+	TB tb6 = newTB("Not empty\n");
+
+	mergeTB(tb4, 1, tb5);
+	char *emptyIntoEmpty = dumpTB(tb4, false);
+	printf("This should print an empty TB:\n%s\n", emptyIntoEmpty);
+	// Should abort
+	// mergeTB(tb4, 2, tb6);
+
+	mergeTB(tb4, 1, tb6);
+	char *nonEmptyIntoEmpty = dumpTB(tb4, false);
+	assert(strcmp("Not empty\n", nonEmptyIntoEmpty) == 0);
+	releaseTB(tb4);
+	free(emptyIntoEmpty);
+	free(nonEmptyIntoEmpty);
+}
+
+static void testAddPrefixTB(void) {
+	TB tb1 = newTB("This\nassignment\nis\nsooooo\nboring\n");
+
+	addPrefixTB (tb1, 2, 4, "Truth: ");
+	char *t1 = dumpTB(tb1, true);
+	assert(strcmp("1. This\n2. Truth: assignment\n3. Truth: is\n4. Truth: sooooo\n5. boring\n", t1) == 0);
+
+	addPrefixTB (tb1, 1, 3, "False: ");
+	char *t2 = dumpTB(tb1, true);
+	assert(strcmp("1. False: This\n2. False: Truth: assignment\n3. False: Truth: is\n4. Truth: sooooo\n5. boring\n", t2) == 0);
+
+	addPrefixTB (tb1, 1, 3, "");
+	char *t3 = dumpTB(tb1, true);
+	assert(strcmp("1. False: This\n2. False: Truth: assignment\n3. False: Truth: is\n4. Truth: sooooo\n5. boring\n", t2) == 0);
+
+	free(t1);
+	free(t2);
+	free(t3);
+	releaseTB(tb1);
+}
+
+static void testNewTB(void) {
+	// Calling dumpTB immediately after newTB, without modifying the TB
+	TB tb1 = newTB("hello there,\nhow\nare\nthings\n");
+	assert(linesTB(tb1) == 4);
+	char *text1 = dumpTB(tb1, false); // Don't show line numbers
+
+	assert(strcmp("hello there,\nhow\nare\nthings\n", text1) == 0);
+	free(text1);
+	releaseTB(tb1);
+	// Empty and single. Empty lines...
+	TB empty = newTB("");
+
+	char *emptyText = dumpTB(empty, false);
+	assert(strcmp(emptyText, "") == 0);
+
+	free(emptyText);
+	releaseTB(empty);
+
+	TB newLines = newTB("\n\n\n\n\n\n\n");
+	char *newLinesText = dumpTB(newLines, false);
+	assert(strcmp(newLinesText, "\n\n\n\n\n\n\n") == 0);
+
+	free(newLinesText);
+	releaseTB(newLines);
+}
